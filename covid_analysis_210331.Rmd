@@ -1,0 +1,100 @@
+---
+title: "COVID-19 Mauritius March 2021"
+author: "Iannish Sadien"
+date: "31/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Incidence data (daily new detected cases) was extracted from websites of Mauritian newspapers (L'Express and Le Defi). Data is stored in an Excel file, available on Github.
+
+All analysis was done in RStudio using packages *earlyR*, *incidence* and *projections*.
+
+Loading required packages and data.
+
+```{r}
+library(incidence)
+library(earlyR)
+library(readxl)
+library(tidyverse)
+library(projections)
+covid <- read_excel("/Users/sadien01/Downloads/covid19_mru_210330.xlsx")
+covid$date <- as.Date(covid$date)
+onset <- covid$date
+today <- as.Date("2021-03-29")
+```
+
+# Analysis
+
+**Daily incidence**
+
+```{r}
+i <- incidence(onset, last_date = today)
+i
+
+plot(i, border = "white")
+```
+
+**Estimation of R (reproduction) number**
+
+Estimation of serial interval is required to calculate R number. This was obtained from a systematic review and meta-analysis of COVID-19 cases (looking at 12 studies). https://www.medrxiv.org/content/10.1101/2020.11.17.20231548v1.full?versioned=true
+
+Mean serial interval using their random effect model in the pre-print was 4.97 days (95% credible interval: 3.85-6.07).
+Standard deviation was 4.23 days (3.84-4.61). 
+
+```{r}
+mu <- 4.97
+sigma <- 4.23
+
+res <- get_R(i, si_mean = mu, si_sd = sigma)
+res
+plot(res)
+
+```
+
+We can also look at what the credible intervals of the R number are by doing the following:
+
+```{r}
+R_val <- sample_R(res, 1000)
+summary(R_val) 
+
+quantile(R_val) 
+
+quantile(R_val, c(0.025, 0.975)) # 95% credibility interval
+
+
+hist(R_val, border = "grey", col = "navy",
+     xlab = "Values of R",
+     main = "Sample of likely R values")
+
+```
+
+From the above, we can be 95% sure that the R number lies between 1.24 and 1.55.
+
+# Projection
+
+Using the *projections* package, we can try to predict what the incidence will be based on data we have already.
+
+```{r}
+si <- res$si
+si
+
+future_i <- project(i, R = R_val, n_sim = 1000, si = res$si, n_days = 30)
+future_i
+
+mean(future_i) 
+
+plot(future_i)
+
+```
+
+# Conclusion
+
+The analysis comes with some caveats. It depends on the accuracy of the data published by the newspapers above. Aside from this, the biggest assumption is the value for the mean serial interval and its standard deviation. This can vary but the values used come from a meta-analysis looking at 12 studies, which give us some confidence. A more accurate measure would be obtained by calculating the serial interval in the Mauritian context but in the absence of this data, the next best solution is to do what we have done.
+
+In spite of the caveats above, R number is convincingly > 1, based on data up to 29/03/2021.
